@@ -15,16 +15,20 @@
                                 aria-describedby="username"
                                 name="username"
                                 v-model="user.nickname"
+                                :class="error != null ? 'is-invalid' : ''"
                             >
+                            <div v-if="error" id="usernameValidation" class="invalid-feedback">{{ error }}</div>
                         </div>
                         <div class="mb-3">
                             <label for="exampleInputPassword1" class="form-label text-light color">Senha</label>
                             <input 
                                 type="password" 
-                                class="form-control focus-ring focus-ring-secondary bg-transparent text-light"  
+                                class="form-control focus-ring focus-ring-secondary bg-transparent text-light"
+                                :class="error != null ? 'is-invalid' : ''"  
                                 id="exampleInputPassword1"
                                 v-model="user.password"
                             >
+                            <div v-if="error" id="passwordValidation" class="invalid-feedback">{{ error }}</div>
                         </div>
                         <button type="submit" class="btn btn-primary">Entrar</button>
                     </form>
@@ -47,7 +51,8 @@ const App = defineComponent({
             user: {
                 nickname: null,
                 password: null
-            }
+            },
+            error: null
         }
     },
 
@@ -55,10 +60,13 @@ const App = defineComponent({
         login(){
             req.post(SERVER_URL+'/auth', this.user)
             .then((response) => {
-                console.log(response)
+                localStorage.setItem("dmno", response.data.token);
+                this.$router.push('/play')
             })
             .catch((reason) => {
-                console.log(reason)
+                if(reason.response.data.errors){
+                    this.error = reason.response.data.errors[0].message
+                }
             })
         }
     }
