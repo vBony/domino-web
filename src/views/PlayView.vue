@@ -21,6 +21,9 @@
             </div>
             <div class="col-10 col-lg-10 col-md-10 col-sm-10 col-xs-10">
                 <div class="card p-3 bg-dark" style="height: 60vh;border-color: var(--color-border) !important">
+                    <div>
+                        <button class="btn btn-danger" @click.prevent="jogar()">Jogar</button>
+                    </div>
                 </div>
             </div>
             <div class="col-1 col-lg-1 col-md-1 col-sm-1 col-xs-1 d-flex align-items-center">
@@ -43,3 +46,58 @@
     </div>
 </div>
 </template>
+
+<script lang="ts">
+import { defineComponent } from 'vue';
+import req from '../helpers/http'
+import { Manager, Socket, io } from 'socket.io-client';
+
+const SERVER_URL = import.meta.env.VITE_SERVER_URL
+
+const App = defineComponent({
+    data() {
+        return {
+            user: {
+                nickname: null,
+                password: null
+            },
+            error: null,
+            manager: null as Manager | null,
+            gameSocket: null as Socket | null,
+            chatSocket: null as Socket | null
+        }
+    },
+
+    created() {
+        this.manager = new Manager(SERVER_URL, {
+            autoConnect: false,
+            query: { userID: 321 }
+        })
+
+        this.gameSocket = this.manager.socket('/play');
+        
+        this.gameSocket.on('connect', () => {
+            console.log('Socket connected:', this.gameSocket?.id);
+        });
+
+        // Adicione um listener para o evento de desconexão
+        this.gameSocket.on('disconnect', () => {
+            console.log('Socket disconnected');
+        });
+
+        this.gameSocket.connect();
+    },
+
+    methods: {
+        jogar(){
+            this.gameSocket?.emit('play', {peca: [3,1]});
+
+            this.gameSocket?.on('playResponse', (response) => {
+                console.log('Received playResponse from server:', response);
+            });
+        }
+    }
+})
+
+export default App
+</script>
