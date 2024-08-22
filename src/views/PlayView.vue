@@ -50,7 +50,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import req from '../helpers/http'
-import { Manager, Socket, io } from 'socket.io-client';
+import { Manager, Socket} from 'socket.io-client';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL
 
@@ -58,8 +58,8 @@ const App = defineComponent({
     data() {
         return {
             user: {
-                nickname: null,
-                password: null
+                id: null,
+                nickname: null
             },
             error: null,
             manager: null as Manager | null,
@@ -69,23 +69,8 @@ const App = defineComponent({
     },
 
     created() {
-        this.manager = new Manager(SERVER_URL, {
-            autoConnect: false,
-            query: { userID: 321 }
-        })
-
-        this.gameSocket = this.manager.socket('/play');
-        
-        this.gameSocket.on('connect', () => {
-            console.log('Socket connected:', this.gameSocket?.id);
-        });
-
-        // Adicione um listener para o evento de desconexão
-        this.gameSocket.on('disconnect', () => {
-            console.log('Socket disconnected');
-        });
-
-        this.gameSocket.connect();
+        this.getUserData()
+        this.connectSocketGame()
     },
 
     methods: {
@@ -95,6 +80,39 @@ const App = defineComponent({
             this.gameSocket?.on('playResponse', (response) => {
                 console.log('Received playResponse from server:', response);
             });
+        },
+
+        getUserData(){
+            //TODO: componentizar
+            let data = localStorage.getItem('dmno_user')
+            if(data){
+                try {
+                    this.user = JSON.parse(data);
+                } catch (error) {
+                    this.$router.replace("/login")
+                }
+            }
+        },
+
+        connectSocketGame(){
+            this.manager = new Manager(SERVER_URL, {
+                autoConnect: false,
+                query: { userID: this.user?.id }
+            })
+
+            this.gameSocket = this.manager.socket('/play');
+            
+            this.gameSocket.on('connect', () => {
+                console.log('Socket connected:', this.gameSocket?.id);
+            });
+
+            //TODO: passar o evento de desconexão para a função de desconexão
+            // Adicione um listener para o evento de desconexão
+            this.gameSocket.on('disconnect', () => {
+                console.log('Socket disconnected');
+            });
+
+            this.gameSocket.connect();
         }
     }
 })
