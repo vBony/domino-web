@@ -3,6 +3,7 @@ import HomeView from '../views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
 import req from '@/helpers/http'
 import SignUpView from '@/views/SignUpView.vue'
+import PartidaAndamentoView from '@/views/PartidaAndamentoView.vue'
 
 /**
  * Autentica e armazena os dados do usuário logado
@@ -38,6 +39,11 @@ const router = createRouter({
 			path: '/signup',
 			name: 'signup',
 			component: SignUpView
+		},
+		{
+			path: '/partida-andamento',
+			name: 'signup',
+			component: PartidaAndamentoView
 		},
 		{
 			path: '/about',

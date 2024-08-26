@@ -75,7 +75,7 @@ const App = defineComponent({
 
     methods: {
         jogar(){
-            this.gameSocket?.emit('play', {peca: [3,1]});
+            this.gameSocket?.emit('game:play', {peca: [3,1]});
 
             this.gameSocket?.on('playResponse', (response) => {
                 console.log('Received playResponse from server:', response);
@@ -104,6 +104,14 @@ const App = defineComponent({
             
             this.gameSocket.on('connect', () => {
                 console.log('Socket connected:', this.gameSocket?.id);
+            });
+
+            this.gameSocket.on('error', (reason) => {
+                console.log('Socket error:', reason);
+            });
+
+            this.gameSocket.on('game:full', (response) => {
+                this.$router.replace('/partida-andamento')
             });
 
             //TODO: passar o evento de desconexão para a função de desconexão
