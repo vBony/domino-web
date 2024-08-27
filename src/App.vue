@@ -27,7 +27,7 @@
 		</nav>
 	</div>
 
-	<main class="container py-4">
+	<main class="py-4">
 		<RouterView />
 	</main>
 
