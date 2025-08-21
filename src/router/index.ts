@@ -11,7 +11,7 @@ import PartidaAndamentoView from '@/views/PartidaAndamentoView.vue'
 async function setUserDataAuthenticate(): Promise<boolean> {
 	const SERVER_URL = import.meta.env.VITE_SERVER_URL
 	try {
-		const response = await req.get(SERVER_URL+'/auth/user')
+		const response = await req.get(SERVER_URL+'/auth/get-user')
 
 		let data = JSON.stringify(response.data)
 		localStorage.setItem("dmno_user", data);
