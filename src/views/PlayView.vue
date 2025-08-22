@@ -6,8 +6,9 @@
         <div class="col-12 d-flex justify-content-center">
             <div class="d-flex flex-column align-items-bottom justify-content-center mb-4" v-if="players[2] !== undefined">
                 <player-table 
-                    :nickname="players[2].model.nickname"
+                    :nickname="players[2].nickname"
                     :id="players[2].id"
+                    :online="players[2].online"
                 />
             </div>
         </div>
@@ -15,8 +16,9 @@
             <div class="col-1 col-lg-1 col-md-1 col-sm-1 col-xs-1 d-flex align-items-center justify-content-end">
                 <div class="d-flex flex-column align-items-center justify-content-center mb-4" v-if="players[3] !== undefined">
                     <player-table 
-                        :nickname="players[3].model.nickname"
+                        :nickname="players[3].nickname"
                         :id="players[3].id"
+                        :online="players[3].online"
                     />
                 </div>
             </div>
@@ -30,8 +32,9 @@
             <div class="col-1 col-lg-1 col-md-1 col-sm-1 col-xs-1 d-flex align-items-center">
                 <div class="d-flex flex-column align-items-center justify-content-center mb-4" v-if="players[4] !== undefined">
                     <player-table 
-                        :nickname="players[4].model.nickname"
+                        :nickname="players[4].nickname"
                         :id="players[4].id"
+                        :online="players[4].online"
                     />
                 </div>
             </div>
@@ -108,14 +111,14 @@ const App = defineComponent({
             }
         },
 
-        socketGameInstance(){
+        socketGameInstance() {
             this.manager = new Manager(SERVER_URL, {
                 autoConnect: false,
                 query: { userID: this.user?.id }
-            })
+            });
 
-            this.gameSocket = this.manager.socket('/play');
-            
+            this.gameSocket = this.manager.socket('/game');
+
             this.gameSocket?.on('connect', () => {
                 console.log('Socket connected:', this.gameSocket?.id);
             });
@@ -124,39 +127,35 @@ const App = defineComponent({
                 console.log('Socket error:', reason);
             });
 
-            this.gameSocket?.on('game:full', (response) => {
-                this.$router.replace('/partida-andamento')
+            this.gameSocket?.on('table_full', () => {
+                this.$router.replace('/partida-andamento');
             });
 
-            this.gameSocket?.on('player:joined', (response) => {
-                this.refreshPlayers(response.players)
+            this.gameSocket?.on('player_joined', (response) => {
+                this.refreshPlayers(response.players);
             });
 
-            this.gameSocket?.on('player:disconnected', (response) => {
-                console.log('player disconnected')
-                this.refreshPlayers(response.players)
+            this.gameSocket?.on('player_left', (response) => {
+                this.refreshPlayers(response.players, response.leftPlayer);
             });
 
-            //TODO: passar o evento de desconexão para a função de desconexão
-            // Adicione um listener para o evento de desconexão
             this.gameSocket?.on('disconnect', () => {
                 console.log('Socket disconnected');
             });
 
             this.gameSocket.connect();
         },
+
         
         refreshPlayers(players){
             const firstPositionTable = 1
-            Object.entries(players).forEach(([key, player]) => {
+            for (const player of Object.values(players)) {
                 if(player?.id == this.user.id){
                     this.players[1] = player
                 }else{
                     this.players[firstPositionTable + 1] = player
                 }
-            });
-
-            console.log(this.players)
+            }
         }
     }
 })
