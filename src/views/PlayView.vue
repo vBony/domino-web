@@ -91,12 +91,7 @@ const App = defineComponent({
     },
 
     methods: {
-        jogar(){
-            this.gameSocket?.emit('game:play', {peca: [3,1]});
-
-            this.gameSocket?.on('playResponse', (response) => {
-                console.log('Received playResponse from server:', response);
-            });
+        jogar(){        
         },
 
         getUserData(){
@@ -117,7 +112,7 @@ const App = defineComponent({
                 query: { userID: this.user?.id }
             });
 
-            this.gameSocket = this.manager.socket('/game');
+            this.gameSocket = this.manager.socket('/queue');
 
             this.gameSocket?.on('connect', () => {
                 console.log('Socket connected:', this.gameSocket?.id);
