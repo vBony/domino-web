@@ -131,7 +131,11 @@ const App = defineComponent({
             });
 
             this.gameSocket?.on('player_left', (response) => {
-                this.refreshPlayers(response.players, response.leftPlayer);
+                this.refreshPlayers(response.players);
+            });
+
+            this.gameSocket?.on('game:start', (response) => {
+                this.refreshPlayers(response)
             });
 
             this.gameSocket?.on('disconnect', () => {
