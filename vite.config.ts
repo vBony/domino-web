@@ -1,18 +1,16 @@
-import { fileURLToPath, URL } from 'node:url'
+import { defineConfig } from "vite";
+import tsconfigPaths from "vite-tsconfig-paths";
 
-import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
-import vueJsx from '@vitejs/plugin-vue-jsx'
-
-// https://vitejs.dev/config/
+// Vite resolve os path aliases (@engine, @scenes, ...) a partir do tsconfig.json
+// via vite-tsconfig-paths, para nao duplicar a config de aliases em dois lugares.
 export default defineConfig({
-  plugins: [
-    vue(),
-    vueJsx(),
-  ],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
+  plugins: [tsconfigPaths()],
+  server: {
+    port: 5173,
+    host: true
+  },
+  build: {
+    target: "es2022",
+    sourcemap: true
   }
-})
+});
