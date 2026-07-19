@@ -1,4 +1,5 @@
 import { DominoPiece } from "./DominoPiece";
+import { GameView } from "./GameView";
 import { Hand } from "./Hand";
 import { MoveValidator, OpenEnds, MoveSide } from "./MoveValidator";
 import { DominoRules } from "./DominoRules";
@@ -10,7 +11,7 @@ export type GameStatus = "waiting" | "in-progress" | "finished";
 // e turno. E a unica classe que muta essas estruturas - sempre validando
 // a jogada antes (via MoveValidator) - para nenhuma camada externa (Scene,
 // Manager, Network) conseguir colocar o jogo num estado invalido.
-export class GameState {
+export class GameState implements GameView {
   private readonly playerIds: readonly string[];
   private readonly hands: Map<string, Hand>;
   private readonly turnManager: TurnManager;

@@ -33,27 +33,14 @@ export class WinnerCalculator {
     return { winnerId, scoreByPlayer, reason: "hand-empty" };
   }
 
-  // Jogo travado: vence quem tiver menos pips na mao, pontuando a soma dos
-  // pips dos adversarios. Empate na menor soma = ninguem pontua nesta rodada.
+  // Jogo travado (ninguem tem jogada): sempre termina empatado, sem
+  // decidir vencedor pela soma de pips na mao. Uma revanche valendo o
+  // dobro de pontos para desempatar fica para uma proxima rodada.
   private calculateBlockedResult(hands: readonly HandSummary[]): RoundResult {
-    const lowestPips = Math.min(...hands.map((hand) => hand.totalPips));
-    const candidates = hands.filter((hand) => hand.totalPips === lowestPips);
-
     const scoreByPlayer = new Map<string, number>();
     for (const hand of hands) {
       scoreByPlayer.set(hand.playerId, 0);
     }
-
-    if (candidates.length !== 1) {
-      return { winnerId: null, scoreByPlayer, reason: "blocked" };
-    }
-
-    const winner = candidates[0]!;
-    const totalOpponentPips = hands
-      .filter((hand) => hand.playerId !== winner.playerId)
-      .reduce((sum, hand) => sum + hand.totalPips, 0);
-
-    scoreByPlayer.set(winner.playerId, totalOpponentPips);
-    return { winnerId: winner.playerId, scoreByPlayer, reason: "blocked" };
+    return { winnerId: null, scoreByPlayer, reason: "blocked" };
   }
 }

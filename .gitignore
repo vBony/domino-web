@@ -4,3 +4,6 @@ dist/
 *.log
 .env
 .env.local
+
+# notas de contexto do Claude Code (locais, nao versionadas - repo publico)
+.claude/CONTEXTO.md

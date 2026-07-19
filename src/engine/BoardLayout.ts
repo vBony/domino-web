@@ -45,22 +45,21 @@ export class BoardLayout {
       const direction = DIRECTIONS[directionIndex]!;
       const lengthAlongDirection = piece.isDouble() ? this.config.pieceWidth : this.config.pieceLength;
 
-      // Qualquer peca pode virar a cobra, inclusive uma dupla: como a
-      // dobradica fica centralizada na mesma linha do segmento anterior
-      // (ver placePivot), sua silhueta e identica a de uma dupla comum no
-      // meio do trecho - nao ha conflito visual.
-      //
-      // Alem do gatilho normal (limite do segmento ja atingido), uma dupla
-      // que ENCERRARIA o trecho antecipa a virada e vira a dobradica ela
-      // mesma: se ficasse na fileira como ultima peca, ela (perpendicular)
-      // e a dobradica seguinte (tambem perpendicular) ficariam lado a lado,
-      // parecendo duas pecas viradas coladas - visual que nao existe no
-      // domino real.
-      const limitReached = segmentDistance >= this.config.maxSegmentLength;
-      const doubleWouldEndSegment =
-        piece.isDouble() && segmentDistance + lengthAlongDirection >= this.config.maxSegmentLength;
+      // So uma dupla pode virar a cobra - igual no domino real, onde so
+      // pecas carroca sao jogadas atravessadas (de bucha). Uma peca comum
+      // tem valores left/right diferentes que so fazem sentido alinhados
+      // com UMA direcao (o "left" encosta no vizinho de tras, o "right" no
+      // da frente); se ela virasse a curva, seria desenhada em pe (valores
+      // no topo/base em vez de esquerda/direita) e o valor que deveria
+      // encostar no vizinho anterior nao apareceria mais do lado certo -
+      // parecendo, visualmente, que qualquer peca encaixa em qualquer
+      // ponta. A dupla nao tem esse problema (left === right), entao pode
+      // ser desenhada em pe sem ambiguidade. Se o segmento passar do
+      // limite sem nenhuma dupla por perto, ele so continua reto ate a
+      // proxima dupla aparecer - mais longo visualmente, mas nunca errado.
+      const shouldPivot = piece.isDouble() && segmentDistance + lengthAlongDirection >= this.config.maxSegmentLength;
 
-      if (limitReached || doubleWouldEndSegment) {
+      if (shouldPivot) {
         const nextDirection = DIRECTIONS[(directionIndex + 1) % DIRECTIONS.length]!;
         const pivot = this.placePivot(piece, cursorX, cursorY, direction, nextDirection);
         placed.push(pivot.placedPiece);
@@ -90,13 +89,9 @@ export class BoardLayout {
     return placed;
   }
 
-  // A peca que vira a cobra funciona como uma dobradica: encosta na ultima
-  // peca do trecho (meia espessura ao longo da direcao antiga) e fica com a
-  // borda EXTERNA (o lado oposto a nova direcao) alinhada com a borda
-  // externa do trecho antigo - nao centralizada na linha. Assim o "topo" da
-  // peca da curva fica rente ao topo da fileira e ela se estende so para o
-  // lado da virada. Excecao: uma bucha fazendo a curva permanece
-  // centralizada na linha, que e a convencao visual de bucha (crossways).
+  // A peca que vira a cobra e sempre uma dupla (ver computeLayout), entao
+  // fica centralizada na linha do trecho anterior - convencao visual de
+  // bucha (crossways) - sem precisar de nenhum ajuste extra de alinhamento.
   private placePivot(
     piece: DominoPiece,
     cursorX: number,
@@ -107,9 +102,8 @@ export class BoardLayout {
     const halfThickness = this.config.pieceWidth / 2;
     const halfPivotLength = this.config.pieceLength / 2;
 
-    const offsetAlongNew = piece.isDouble() ? 0 : halfPivotLength - halfThickness;
-    const pivotX = cursorX + direction.dx * halfThickness + nextDirection.dx * offsetAlongNew;
-    const pivotY = cursorY + direction.dy * halfThickness + nextDirection.dy * offsetAlongNew;
+    const pivotX = cursorX + direction.dx * halfThickness;
+    const pivotY = cursorY + direction.dy * halfThickness;
 
     // A silhueta da dobradica acompanha a NOVA direcao (alta se o proximo
     // trecho for vertical, deitada se for horizontal) - nao a direcao antiga.

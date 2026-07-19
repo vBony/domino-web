@@ -6,22 +6,22 @@ export interface ChatServiceEvents extends Record<string, unknown[]> {
 }
 
 // Guarda o historico de mensagens da sala e escuta o NetworkService para
-// mensagens vindas de outros jogadores. So estrutura por enquanto - nao
-// ha metodo de envio via rede ainda porque o contrato NetworkService.sendChat
-// sera definido junto do backend real (ver comentario em sendMessage).
+// mensagens vindas de outros jogadores. O servidor ainda nao implementa um
+// canal de chat de verdade (sendChat e um no-op no ColyseusNetworkService
+// por enquanto), entao o echo local garante que a propria mensagem sempre
+// aparece na UI independente do backend.
 export class ChatService {
   readonly events = new EventEmitter<ChatServiceEvents>();
   private readonly messages: ChatMessageDTO[] = [];
 
-  constructor(networkService: NetworkService) {
+  constructor(private readonly networkService: NetworkService) {
     networkService.receiveChat((message) => this.handleIncoming(message));
   }
 
   async sendMessage(playerId: string, text: string): Promise<void> {
-    // Integracao futura: NetworkService.sendChat(message) quando o contrato
-    // do backend for definido. Por enquanto (LOCAL_MODE), ecoa localmente.
     const message: ChatMessageDTO = { playerId, text, sentAt: Date.now() };
     this.handleIncoming(message);
+    await this.networkService.sendChat(text);
   }
 
   getHistory(): readonly ChatMessageDTO[] {
