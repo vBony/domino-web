@@ -32,6 +32,7 @@ export class DominoPieceView extends Phaser.GameObjects.Container {
   private readonly graphics: Phaser.GameObjects.Graphics;
   private faceDown = false;
   private isVertical = false;
+  private reversed = false;
 
   constructor(
     scene: Phaser.Scene,
@@ -61,12 +62,21 @@ export class DominoPieceView extends Phaser.GameObjects.Container {
     this.redraw();
   }
 
+  // true quando o trecho da cadeia anda no sentido negativo (esquerda ou
+  // para cima) - ver PlacedPiece.reversed para o porque.
+  setReversed(reversed: boolean): void {
+    if (this.reversed === reversed) return;
+    this.reversed = reversed;
+    this.redraw();
+  }
+
   // Aplica a posicao/orientacao ja calculadas pelo BoardLayout (engine),
   // convertendo unidades de mundo para pixels de tela. rotation !== 0
   // significa "peca em pe" (perpendicular ao fluxo da cadeia nesse trecho).
   applyPlacement(placed: PlacedPiece): void {
     const scale = this.config.worldToPixelScale ?? 1;
     this.setPosition(placed.x * scale, placed.y * scale);
+    this.setReversed(placed.reversed);
     this.setVertical(placed.rotation !== 0);
   }
 
@@ -89,14 +99,25 @@ export class DominoPieceView extends Phaser.GameObjects.Container {
     // A divisoria muda de eixo conforme a peca esta deitada ou em pe, mas o
     // desenho dos pips (ex: o 6 em duas colunas de tres) nunca gira junto -
     // ele so e reposicionado para caber na metade certa.
+    //
+    // this.reversed inverte qual metade fisica mostra qual valor: piece.left
+    // sempre encosta no vizinho anterior da cadeia, mas "anterior" so cai no
+    // lado esquerdo/topo da tela quando o trecho anda pra direita/baixo (ver
+    // PlacedPiece.reversed) - nos trechos que andam pro lado negativo, os
+    // valores precisam trocar de metade fisica pra continuar encostando no
+    // vizinho certo visualmente.
+    const [firstValue, secondValue] = this.reversed
+      ? [this.piece.right, this.piece.left]
+      : [this.piece.left, this.piece.right];
+
     if (this.isVertical) {
       this.graphics.lineBetween(-halfW, 0, halfW, 0);
-      this.drawHalf(this.piece.left, { x: 0, y: -halfH / 2 }, { x: halfW, y: halfH / 2 });
-      this.drawHalf(this.piece.right, { x: 0, y: halfH / 2 }, { x: halfW, y: halfH / 2 });
+      this.drawHalf(firstValue, { x: 0, y: -halfH / 2 }, { x: halfW, y: halfH / 2 });
+      this.drawHalf(secondValue, { x: 0, y: halfH / 2 }, { x: halfW, y: halfH / 2 });
     } else {
       this.graphics.lineBetween(0, -halfH, 0, halfH);
-      this.drawHalf(this.piece.left, { x: -halfW / 2, y: 0 }, { x: halfW / 2, y: halfH });
-      this.drawHalf(this.piece.right, { x: halfW / 2, y: 0 }, { x: halfW / 2, y: halfH });
+      this.drawHalf(firstValue, { x: -halfW / 2, y: 0 }, { x: halfW / 2, y: halfH });
+      this.drawHalf(secondValue, { x: halfW / 2, y: 0 }, { x: halfW / 2, y: halfH });
     }
   }
 

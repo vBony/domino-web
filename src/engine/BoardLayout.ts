@@ -11,6 +11,15 @@ export interface PlacedPiece {
   x: number;
   y: number;
   rotation: number;
+  // true quando o trecho atual anda no sentido negativo do eixo (esquerda
+  // ou para cima). piece.left sempre encosta no vizinho anterior da cadeia
+  // e piece.right no proximo (ver DominoGame/GameState), mas isso so cai
+  // certo em "esquerda-fica-na-esquerda-da-tela"/"topo-fica-em-cima" quando
+  // a cobra anda no sentido positivo (direita/baixo). Nos trechos que andam
+  // pro lado negativo, quem desenha (DominoPieceView) precisa inverter qual
+  // metade fisica mostra qual valor, senao a peca fica com os dois lados
+  // trocados na tela mesmo com os dados corretos.
+  reversed: boolean;
 }
 
 export interface BoardLayoutConfig {
@@ -78,7 +87,8 @@ export class BoardLayout {
         piece,
         x: cursorX + direction.dx * halfLength,
         y: cursorY + direction.dy * halfLength,
-        rotation: this.computeRotation(isHorizontalDirection, piece.isDouble())
+        rotation: this.computeRotation(isHorizontalDirection, piece.isDouble()),
+        reversed: direction.dx < 0 || direction.dy < 0
       });
 
       cursorX += direction.dx * lengthAlongDirection;
@@ -111,7 +121,9 @@ export class BoardLayout {
     const rotation = nextIsHorizontal ? 0 : Math.PI / 2;
 
     return {
-      placedPiece: { piece, x: pivotX, y: pivotY, rotation },
+      // reversed nao importa aqui: quem vira a cobra e sempre uma dupla
+      // (left === right), entao as duas metades mostram o mesmo valor.
+      placedPiece: { piece, x: pivotX, y: pivotY, rotation, reversed: false },
       nextCursorX: pivotX + nextDirection.dx * halfPivotLength,
       nextCursorY: pivotY + nextDirection.dy * halfPivotLength
     };
