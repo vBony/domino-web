@@ -108,14 +108,25 @@ export class GameManager {
     return this.replayManager;
   }
 
-  // Decide em qual lado (se algum) uma peca da mao pode ser jogada agora.
-  // Usado pela camada visual para transformar "clique numa peca" em uma
-  // jogada valida, sem que a Scene precise conhecer regras do tabuleiro.
-  getPlayableSide(playerId: string, pieceId: string): MoveSide | null {
+  // Em quais lados (nenhum, um ou os dois) uma peca da mao pode ser jogada
+  // agora. Usado pela camada visual para decidir se joga direto (so um
+  // lado serve) ou se precisa perguntar ao jogador qual ponta usar (os
+  // dois servem) - sem que a Scene precise conhecer regras do tabuleiro.
+  getPlayableSides(playerId: string, pieceId: string): MoveSide[] {
     const game = this.getCurrentGame();
-    if (game.canPlay(playerId, pieceId, "left")) return "left";
-    if (game.canPlay(playerId, pieceId, "right")) return "right";
-    return null;
+    const sides: MoveSide[] = [];
+    if (game.canPlay(playerId, pieceId, "left")) sides.push("left");
+    if (game.canPlay(playerId, pieceId, "right")) sides.push("right");
+    return sides;
+  }
+
+  // Valor exposto em cada ponta aberta do tabuleiro, pra UI mostrar ao
+  // jogador o que cada escolha de lado realmente conecta. null = mesa
+  // vazia (nenhuma ponta ainda).
+  getOpenEndValues(): { left: number; right: number } | null {
+    const board = this.getCurrentGame().getBoard();
+    if (board.length === 0) return null;
+    return { left: board[0]!.left, right: board[board.length - 1]!.right };
   }
 
   playPiece(playerId: string, pieceId: string, side: MoveSide): void {

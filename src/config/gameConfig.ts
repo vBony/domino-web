@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { BootScene } from "@scenes/BootScene";
+import { MenuScene } from "@scenes/MenuScene";
 import { TableScene } from "@scenes/TableScene";
 
 // Configuracao pura do Phaser (renderer, escala, resolucao). Scenes sao
@@ -18,5 +19,10 @@ export const PHASER_GAME_CONFIG: Phaser.Types.Core.GameConfig = {
     antialias: true,
     pixelArt: false
   },
-  scene: [BootScene, TableScene]
+  // Necessario para GameObjects.DOMElement (campo de nome real na
+  // MenuScene) - sem isso this.add.dom() nao tem onde montar o elemento.
+  dom: {
+    createContainer: true
+  },
+  scene: [BootScene, MenuScene, TableScene]
 };

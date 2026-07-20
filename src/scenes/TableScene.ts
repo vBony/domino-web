@@ -3,6 +3,7 @@ import { SCENE_KEYS } from "@config/sceneKeys";
 import { LOCAL_MODE } from "@config/localMode";
 import { Player } from "@engine/Player";
 import { DominoPiece } from "@engine/DominoPiece";
+import { MoveSide } from "@engine/MoveValidator";
 import { DominoRules, STANDARD_DOUBLE_SIX_RULES } from "@engine/DominoRules";
 import { BoardLayout } from "@engine/BoardLayout";
 import { CameraBounds } from "@engine/CameraBounds";
@@ -16,10 +17,17 @@ import { DominoPieceView } from "@objects/DominoPieceView";
 import { OpponentSeatView } from "@objects/OpponentSeatView";
 import { LocalHandView } from "@objects/LocalHandView";
 import { TimelinePanelView } from "@objects/TimelinePanelView";
+import { SideChoiceView } from "@objects/SideChoiceView";
 
 const PIECE_LENGTH = 64;
 const PIECE_WIDTH = 32;
 const OPPONENT_SLOTS: readonly OpponentSlot[] = ["top", "left", "right"];
+
+// Dados recebidos via scene.start(SCENE_KEYS.Table, data) - a MenuScene e
+// quem coleta o nome do jogador agora (window.prompt saiu).
+interface TableSceneData {
+  nickname?: string;
+}
 
 // Scene principal: orquestra GameManager (estado/eventos), LayoutManager
 // (posicoes responsivas) e as views (DominoPieceView/OpponentSeatView/
@@ -52,6 +60,11 @@ export class TableScene extends Phaser.Scene {
   private statusText!: Phaser.GameObjects.Text;
   private timelinePanel!: TimelinePanelView;
   private readonly timelineEntries: string[] = [];
+  private sideChoiceView!: SideChoiceView;
+  // Peca clicada aguardando o jogador escolher em qual ponta jogar, quando
+  // ela encaixa nos dois lados abertos do tabuleiro (ver
+  // handleLocalPieceClicked). null = nenhuma escolha pendente.
+  private pendingPiece: DominoPiece | null = null;
   private boardArea: Rect = { x: 0, y: 0, width: 0, height: 0 };
   // Phaser chama update() a cada frame independente do create() (async
   // para o modo online) ja ter terminado. Sem este guard, update() roda
@@ -63,17 +76,29 @@ export class TableScene extends Phaser.Scene {
     super(SCENE_KEYS.Table);
   }
 
-  async create(): Promise<void> {
+  async create(data: TableSceneData = {}): Promise<void> {
+    // O Phaser reaproveita a MESMA instancia de Scene entre partidas (Table
+    // -> Menu -> Table de novo nao recria o objeto) - inicializador de
+    // campo de classe (`= []`, `= false`) so roda uma vez, na primeira
+    // partida. Sem resetar aqui, a timeline acumulava entre partidas e
+    // `ready` continuava `true` da partida anterior enquanto esta (async)
+    // ainda estava no meio da configuracao - podendo chamar update() num
+    // gameManager de uma partida ja encerrada.
+    this.ready = false;
+    this.pendingPiece = null;
+    this.timelineEntries.length = 0;
+    this.boardPieceViews.clear();
+
     this.statusText = this.add
       .text(0, 0, "", { fontSize: "20px", color: "#f5f0e6" })
       .setOrigin(0.5)
       .setPosition(this.scale.width / 2, this.scale.height / 2);
 
     if (LOCAL_MODE) {
-      this.setupLocalGame();
+      this.setupLocalGame(data.nickname);
       this.gameManager.startMatch();
     } else {
-      await this.setupOnlineGame();
+      await this.setupOnlineGame(data.nickname);
     }
 
     this.statusText.destroy();
@@ -89,7 +114,14 @@ export class TableScene extends Phaser.Scene {
     // tem fluxo de proxima rodada implementado ainda).
     this.gameManager.events.on("roundEnded", (result) => this.handleRoundEnded(result));
     this.gameManager.events.on("timelineEvent", (event) => this.handleTimelineEvent(event));
-    this.scale.on("resize", () => this.applyLayout());
+
+    // this.scale (ScaleManager) e global ao Game, nao a Scene - sem tirar o
+    // listener no shutdown, cada partida jogada (Table -> Menu -> Table...)
+    // empilha mais um handler chamando applyLayout() numa Scene desativada.
+    const onResize = () => this.applyLayout();
+    this.scale.on("resize", onResize);
+    this.events.once("shutdown", () => this.scale.off("resize", onResize));
+
     this.ready = true;
   }
 
@@ -99,8 +131,10 @@ export class TableScene extends Phaser.Scene {
     this.updateOpponentBadges();
   }
 
-  private setupLocalGame(): void {
-    this.players = [0, 1, 2, 3].map((seat) => new Player(`player-${seat}`, `Jogador ${seat + 1}`, seat));
+  private setupLocalGame(nicknameHint?: string): void {
+    this.players = [0, 1, 2, 3].map(
+      (seat) => new Player(`player-${seat}`, seat === 0 && nicknameHint ? nicknameHint : `Jogador ${seat + 1}`, seat)
+    );
     this.localPlayerId = this.players[0]!.id;
     const rules = new DominoRules(STANDARD_DOUBLE_SIX_RULES);
     this.networkService = new MockNetworkService();
@@ -110,12 +144,13 @@ export class TableScene extends Phaser.Scene {
     });
   }
 
-  // Fluxo minimo de identidade para o modo online: pede um apelido, faz
-  // guest-login + join na sala Colyseus, e so entao monta o GameManager e
-  // aguarda os outros jogadores/o servidor iniciar a partida de verdade.
-  // Uma tela de login/cadastro completa fica para uma proxima rodada.
-  private async setupOnlineGame(): Promise<void> {
-    const nickname = window.prompt("Seu nickname:", "Jogador")?.trim() || undefined;
+  // Fluxo de identidade para o modo online: o nome ja vem da MenuScene
+  // (data.nickname); so falta o guest-login + join na sala Colyseus, e so
+  // entao monta o GameManager e aguarda os outros jogadores/o servidor
+  // iniciar a partida de verdade. Uma tela de login/cadastro completa
+  // fica para uma proxima rodada.
+  private async setupOnlineGame(nicknameHint?: string): Promise<void> {
+    const nickname = nicknameHint?.trim() || undefined;
     const rules = new DominoRules(STANDARD_DOUBLE_SIX_RULES);
     const networkService = new ColyseusNetworkService(nickname);
     this.networkService = networkService;
@@ -165,6 +200,10 @@ export class TableScene extends Phaser.Scene {
     }
 
     this.timelinePanel = new TimelinePanelView(this, { width: 1, height: 1 });
+
+    this.sideChoiceView = new SideChoiceView(this, { buttonWidth: 150, buttonHeight: 44, gap: 16 }, (side) =>
+      this.handleSideChosen(side)
+    );
   }
 
   private applyLayout(): void {
@@ -184,6 +223,11 @@ export class TableScene extends Phaser.Scene {
       schema.localHandArea.y - 8
     );
 
+    this.sideChoiceView.setPosition(
+      schema.localHandArea.x + schema.localHandArea.width / 2,
+      schema.localHandArea.y - 60
+    );
+
     this.timelinePanel.setPosition(schema.chatPanel.x, schema.chatPanel.y);
     this.timelinePanel.resize(schema.chatPanel.width, schema.chatPanel.height);
     this.timelinePanel.setEntries(this.timelineEntries);
@@ -201,6 +245,24 @@ export class TableScene extends Phaser.Scene {
     this.refreshHands();
     this.refreshTopBar();
     this.refreshTurnIndicator();
+    this.cancelPendingChoiceIfStale();
+  }
+
+  // Se por algum motivo o estado mudou enquanto uma escolha de lado estava
+  // pendente (turno passou adiante, peca nao esta mais na mao), cancela em
+  // vez de deixar o prompt velho na tela apontando pra uma jogada que nao
+  // faz mais sentido.
+  private cancelPendingChoiceIfStale(): void {
+    if (!this.pendingPiece) return;
+
+    const game = this.gameManager.getCurrentGame();
+    const stillMyTurn = game.getCurrentPlayerId() === this.getBottomPlayerId();
+    const stillInHand = game.getHand(this.getBottomPlayerId()).has(this.pendingPiece.id);
+
+    if (!stillMyTurn || !stillInHand) {
+      this.pendingPiece = null;
+      this.sideChoiceView.hide();
+    }
   }
 
   private refreshBoard(): void {
@@ -275,6 +337,7 @@ export class TableScene extends Phaser.Scene {
     this.pushTimelineEntry(message);
     window.alert(message);
     void this.networkService.leaveRoom(this.roomId, this.localPlayerId);
+    this.scene.start(SCENE_KEYS.Menu);
   }
 
   // Dupla = mesmo seat%2 (parceiros ficam em assentos opostos - mesma
@@ -343,10 +406,41 @@ export class TableScene extends Phaser.Scene {
   }
 
   private handleLocalPieceClicked(piece: DominoPiece): void {
-    const activePlayerId = this.getBottomPlayerId();
-    const side = this.gameManager.getPlayableSide(activePlayerId, piece.id);
-    if (!side) return;
+    // Clicar de novo na mesma peca que ja esta com a escolha de lado
+    // aberta cancela em vez de abrir outra.
+    if (this.pendingPiece?.id === piece.id) {
+      this.cancelPendingChoice();
+      return;
+    }
 
+    const activePlayerId = this.getBottomPlayerId();
+    const sides = this.gameManager.getPlayableSides(activePlayerId, piece.id);
+    if (sides.length === 0) return;
+
+    const openEnds = this.gameManager.getOpenEndValues();
+    // Mesa vazia: qualquer lado da primeira peca da no mesmo, entao nao
+    // ha escolha real pra perguntar - joga direto.
+    if (sides.length === 1 || !openEnds) {
+      this.cancelPendingChoice();
+      this.gameManager.playPiece(activePlayerId, piece.id, sides[0]!);
+      return;
+    }
+
+    this.pendingPiece = piece;
+    this.sideChoiceView.showFor(openEnds);
+  }
+
+  private handleSideChosen(side: MoveSide): void {
+    if (!this.pendingPiece) return;
+
+    const activePlayerId = this.getBottomPlayerId();
+    const piece = this.pendingPiece;
+    this.cancelPendingChoice();
     this.gameManager.playPiece(activePlayerId, piece.id, side);
+  }
+
+  private cancelPendingChoice(): void {
+    this.pendingPiece = null;
+    this.sideChoiceView.hide();
   }
 }

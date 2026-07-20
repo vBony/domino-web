@@ -2,5 +2,6 @@
 // magicas espalhadas (BootScene, TableScene, etc. importam daqui).
 export const SCENE_KEYS = {
   Boot: "BootScene",
+  Menu: "MenuScene",
   Table: "TableScene"
 } as const;
