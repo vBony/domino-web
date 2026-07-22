@@ -114,6 +114,7 @@ export class TableScene extends Phaser.Scene {
     // tem fluxo de proxima rodada implementado ainda).
     this.gameManager.events.on("roundEnded", (result) => this.handleRoundEnded(result));
     this.gameManager.events.on("timelineEvent", (event) => this.handleTimelineEvent(event));
+    this.gameManager.events.on("invalidMove", (reason) => this.handleInvalidMove(reason));
 
     // this.scale (ScaleManager) e global ao Game, nao a Scene - sem tirar o
     // listener no shutdown, cada partida jogada (Table -> Menu -> Table...)
@@ -364,6 +365,15 @@ export class TableScene extends Phaser.Scene {
       case "turn_passed":
         this.pushTimelineEntry(`${this.nameFor(event.playerId)} passou a vez.`);
         return;
+    }
+  }
+
+  // So o modo online chega aqui: o modo local ja filtra essa jogada em
+  // GameManager.getPlayableSides (via GameState.canPlay), entao o
+  // SideChoiceView nunca oferece um lado que o servidor rejeitaria.
+  private handleInvalidMove(reason: string): void {
+    if (reason === "must_avoid_blocking") {
+      window.alert("Você não pode fechar o jogo jogando esse lado — a outra ponta mantém a partida aberta.");
     }
   }
 

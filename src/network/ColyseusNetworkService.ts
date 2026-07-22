@@ -15,7 +15,8 @@ import {
   PublicPlayerDTO,
   LocalIdentityDTO,
   MatchEndDTO,
-  PassDTO
+  PassDTO,
+  InvalidMoveDTO
 } from "./NetworkService";
 
 interface ColyseusNetworkEvents extends Record<string, unknown[]> {
@@ -27,6 +28,7 @@ interface ColyseusNetworkEvents extends Record<string, unknown[]> {
   publicState: [PublicStateDTO];
   hand: [PieceDTO[]];
   matchEnd: [MatchEndDTO];
+  invalidMove: [InvalidMoveDTO];
 }
 
 interface RawPlayer {
@@ -111,6 +113,7 @@ export class ColyseusNetworkService implements NetworkService {
     });
     room.onMessage("invalid_move", (msg: { reason: string }) => {
       console.warn("[ColyseusNetworkService] invalid_move:", msg.reason);
+      this.emitter.emit("invalidMove", { reason: msg.reason });
     });
     room.onMessage("player_passed", (msg: PassDTO) => {
       this.emitter.emit("pass", msg);
@@ -202,6 +205,11 @@ export class ColyseusNetworkService implements NetworkService {
   receiveReconnect(handler: (payload: ReconnectDTO) => void): () => void {
     this.emitter.on("reconnect", handler);
     return () => this.emitter.off("reconnect", handler);
+  }
+
+  receiveInvalidMove(handler: (payload: InvalidMoveDTO) => void): () => void {
+    this.emitter.on("invalidMove", handler);
+    return () => this.emitter.off("invalidMove", handler);
   }
 
   private async guestLogin(): Promise<string> {

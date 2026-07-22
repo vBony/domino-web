@@ -25,6 +25,7 @@ export interface GameManagerEvents extends Record<string, unknown[]> {
   roundEnded: [RoundResult];
   matchEnded: [string | null];
   timelineEvent: [TimelineEvent];
+  invalidMove: [string];
 }
 
 // Orquestrador de mais alto nivel: e o unico lugar onde LOCAL_MODE muda o
@@ -255,6 +256,7 @@ export class GameManager {
       this.events.emit("timelineEvent", { type: "turn_passed", playerId: pass.playerId });
     });
     this.networkService.receiveMatchEnd((result) => this.handleRemoteMatchEnd(result));
+    this.networkService.receiveInvalidMove((payload) => this.events.emit("invalidMove", payload.reason));
   }
 
   private applyRemoteState(state: PublicStateDTO): void {

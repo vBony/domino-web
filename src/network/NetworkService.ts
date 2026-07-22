@@ -34,6 +34,10 @@ export interface PassDTO {
   playerId: string;
 }
 
+export interface InvalidMoveDTO {
+  reason: string;
+}
+
 export interface RoomInfoDTO {
   roomId: string;
   playerIds: string[];
@@ -113,4 +117,5 @@ export interface NetworkService {
   receiveTimer(handler: (update: TimerUpdateDTO) => void): () => void;
   receiveChat(handler: (message: ChatMessageDTO) => void): () => void;
   receiveReconnect(handler: (payload: ReconnectDTO) => void): () => void;
+  receiveInvalidMove(handler: (payload: InvalidMoveDTO) => void): () => void;
 }

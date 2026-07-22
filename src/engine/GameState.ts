@@ -104,7 +104,21 @@ export class GameState implements GameView {
 
     const openEnds = this.getOpenEnds();
     if (openEnds === null) return true;
-    return side === "left" ? piece.hasValue(openEnds.left) : piece.hasValue(openEnds.right);
+
+    const matchesSide = side === "left" ? piece.hasValue(openEnds.left) : piece.hasValue(openEnds.right);
+    if (!matchesSide) return false;
+
+    // Nao pode escolher um lado que fecha o jogo se o outro lado da MESMA
+    // peca mantem o jogo aberto (mesma regra do servidor, DominoRules.wouldBlockGame).
+    const otherSide: MoveSide = side === "left" ? "right" : "left";
+    const matchesOtherSide = otherSide === "left" ? piece.hasValue(openEnds.left) : piece.hasValue(openEnds.right);
+    if (matchesOtherSide) {
+      const blocksChosenSide = this.wouldBlockGame(playerId, piece, side, openEnds);
+      const blocksOtherSide = this.wouldBlockGame(playerId, piece, otherSide, openEnds);
+      if (blocksChosenSide && !blocksOtherSide) return false;
+    }
+
+    return true;
   }
 
   playPiece(playerId: string, pieceId: string, side: MoveSide): void {
@@ -131,6 +145,23 @@ export class GameState implements GameView {
       throw new Error(`Nao e a vez do jogador ${playerId}`);
     }
     this.turnManager.registerPass();
+  }
+
+  // Simula a jogada e verifica se, com o tabuleiro resultante, nenhum
+  // jogador (considerando as maos reais de todos - modo local tem
+  // visibilidade completa) teria jogada legal.
+  private wouldBlockGame(playerId: string, piece: DominoPiece, side: MoveSide, openEnds: OpenEnds): boolean {
+    const newOpenEnds: OpenEnds =
+      side === "left"
+        ? { left: piece.getOtherEnd(openEnds.left), right: openEnds.right }
+        : { left: openEnds.left, right: piece.getOtherEnd(openEnds.right) };
+
+    for (const pid of this.playerIds) {
+      const hand = this.getHand(pid).getPieces();
+      const remaining = pid === playerId ? hand.filter((p) => p.id !== piece.id) : hand;
+      if (this.moveValidator.hasAnyValidMove(remaining, newOpenEnds)) return false;
+    }
+    return true;
   }
 
   private placeOnBoard(piece: DominoPiece, side: MoveSide): void {

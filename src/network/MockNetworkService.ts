@@ -10,7 +10,8 @@ import {
   PublicStateDTO,
   LocalIdentityDTO,
   MatchEndDTO,
-  PassDTO
+  PassDTO,
+  InvalidMoveDTO
 } from "./NetworkService";
 
 interface MockNetworkEvents extends Record<string, unknown[]> {
@@ -22,6 +23,7 @@ interface MockNetworkEvents extends Record<string, unknown[]> {
   publicState: [PublicStateDTO];
   hand: [PieceDTO[]];
   matchEnd: [MatchEndDTO];
+  invalidMove: [InvalidMoveDTO];
 }
 
 // Implementacao mockada do NetworkService, usada em LOCAL_MODE (ver
@@ -111,5 +113,10 @@ export class MockNetworkService implements NetworkService {
   receiveReconnect(handler: (payload: ReconnectDTO) => void): () => void {
     this.emitter.on("reconnect", handler);
     return () => this.emitter.off("reconnect", handler);
+  }
+
+  receiveInvalidMove(handler: (payload: InvalidMoveDTO) => void): () => void {
+    this.emitter.on("invalidMove", handler);
+    return () => this.emitter.off("invalidMove", handler);
   }
 }
