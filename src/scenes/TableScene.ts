@@ -1,18 +1,15 @@
 import Phaser from "phaser";
 import { SCENE_KEYS } from "@config/sceneKeys";
-import { LOCAL_MODE } from "@config/localMode";
 import { Player } from "@engine/Player";
 import { DominoPiece } from "@engine/DominoPiece";
 import { MoveSide } from "@engine/MoveValidator";
-import { DominoRules, STANDARD_DOUBLE_SIX_RULES } from "@engine/DominoRules";
 import { BoardLayout } from "@engine/BoardLayout";
 import { CameraBounds } from "@engine/CameraBounds";
 import { GameManager, TimelineEvent } from "@managers/GameManager";
 import { LayoutManager, OpponentSlot, Rect, VisualSlot } from "@managers/LayoutManager";
-import { MockNetworkService } from "@network/MockNetworkService";
 import { ColyseusNetworkService } from "@network/ColyseusNetworkService";
 import { NetworkService } from "@network/NetworkService";
-import { RoundResult } from "@engine/WinnerCalculator";
+import { RoundResult, WIN_BONUS_POINTS, WinReason } from "@engine/WinnerCalculator";
 import { DominoPieceView } from "@objects/DominoPieceView";
 import { OpponentSeatView } from "@objects/OpponentSeatView";
 import { LocalHandView } from "@objects/LocalHandView";
@@ -22,6 +19,16 @@ import { SideChoiceView } from "@objects/SideChoiceView";
 const PIECE_LENGTH = 64;
 const PIECE_WIDTH = 32;
 const OPPONENT_SLOTS: readonly OpponentSlot[] = ["top", "left", "right"];
+
+// Como cada tipo de vitoria e descrito na frase do alerta de fim de rodada
+// (ver handleRoundEnded) - so texto de apresentacao, os pontos vem de
+// WIN_BONUS_POINTS.
+const WIN_REASON_PHRASES: Record<WinReason, string> = {
+  gabuada: "com uma GABUADA",
+  "double-ended": "fechando as duas pontas",
+  double: "batendo com a bucha",
+  common: ""
+};
 
 // Dados recebidos via scene.start(SCENE_KEYS.Table, data) - a MenuScene e
 // quem coleta o nome do jogador agora (window.prompt saiu).
@@ -34,9 +41,9 @@ interface TableSceneData {
 // LocalHandView). Nao decide regra de jogo nem calcula layout - so aplica
 // o que essas camadas ja calcularam.
 //
-// Em LOCAL_MODE, os 4 assentos sao simulados nesta mesma aba. Fora disso,
-// esta Scene primeiro resolve uma identidade (guest login + join na sala
-// Colyseus) antes de montar a mesa - ver setupOnlineGame().
+// Esta Scene primeiro resolve uma identidade (guest login + join na sala
+// Colyseus) antes de montar a mesa - ver setupOnlineGame(). O servidor
+// autoritativo (DominoRoom) e a unica fonte de verdade do jogo.
 export class TableScene extends Phaser.Scene {
   private readonly layoutManager = new LayoutManager();
   private readonly boardLayout = new BoardLayout({
@@ -94,12 +101,7 @@ export class TableScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setPosition(this.scale.width / 2, this.scale.height / 2);
 
-    if (LOCAL_MODE) {
-      this.setupLocalGame(data.nickname);
-      this.gameManager.startMatch();
-    } else {
-      await this.setupOnlineGame(data.nickname);
-    }
+    await this.setupOnlineGame(data.nickname);
 
     this.statusText.destroy();
     this.buildStaticVisuals();
@@ -132,27 +134,13 @@ export class TableScene extends Phaser.Scene {
     this.updateOpponentBadges();
   }
 
-  private setupLocalGame(nicknameHint?: string): void {
-    this.players = [0, 1, 2, 3].map(
-      (seat) => new Player(`player-${seat}`, seat === 0 && nicknameHint ? nicknameHint : `Jogador ${seat + 1}`, seat)
-    );
-    this.localPlayerId = this.players[0]!.id;
-    const rules = new DominoRules(STANDARD_DOUBLE_SIX_RULES);
-    this.networkService = new MockNetworkService();
-
-    this.gameManager = new GameManager(this.players, rules, this.networkService, this.localPlayerId, {
-      targetScore: 100
-    });
-  }
-
-  // Fluxo de identidade para o modo online: o nome ja vem da MenuScene
-  // (data.nickname); so falta o guest-login + join na sala Colyseus, e so
-  // entao monta o GameManager e aguarda os outros jogadores/o servidor
-  // iniciar a partida de verdade. Uma tela de login/cadastro completa
-  // fica para uma proxima rodada.
+  // Fluxo de identidade: o nome ja vem da MenuScene (data.nickname); so
+  // falta o guest-login + join na sala Colyseus, e so entao monta o
+  // GameManager e aguarda os outros jogadores/o servidor iniciar a
+  // partida de verdade. Uma tela de login/cadastro completa fica para uma
+  // proxima rodada.
   private async setupOnlineGame(nicknameHint?: string): Promise<void> {
     const nickname = nicknameHint?.trim() || undefined;
-    const rules = new DominoRules(STANDARD_DOUBLE_SIX_RULES);
     const networkService = new ColyseusNetworkService(nickname);
     this.networkService = networkService;
 
@@ -171,7 +159,7 @@ export class TableScene extends Phaser.Scene {
     }
     this.localPlayerId = identity.id;
 
-    this.gameManager = new GameManager([], rules, networkService, this.localPlayerId, { targetScore: 100 });
+    this.gameManager = new GameManager(networkService, this.localPlayerId);
     this.statusText.setText(this.describeWaitingStatus("waiting", this.players.length));
 
     await this.gameManager.startMatch();
@@ -311,14 +299,9 @@ export class TableScene extends Phaser.Scene {
   private refreshTopBar(): void {
     const game = this.gameManager.getCurrentGame();
     const currentPlayer = this.players.find((player) => player.id === game.getCurrentPlayerId());
-    // "Rodada" (contagem de rodadas de uma Match multi-rodada) so existe no
-    // modo local hoje - o servidor ainda encerra a partida na primeira
-    // rodada (ver DominoRoom.finishMatch), entao esse contador nao se aplica.
-    const roundLabel = LOCAL_MODE ? `Rodada ${this.gameManager.getReplayManager().getRounds().length}  |  ` : "";
     const myName = this.players.find((player) => player.id === this.localPlayerId)?.name;
-    const roomLabel = LOCAL_MODE ? "Sala Local" : `Sala Online (${myName ?? "..."})`;
     this.topBarText.setText(
-      `${roomLabel}  |  ${roundLabel}Vez de: ${currentPlayer?.name ?? "-"}  |  Boneyard: ${game.getBoneyardCount()}`
+      `Sala Online (${myName ?? "..."})  |  Vez de: ${currentPlayer?.name ?? "-"}  |  Boneyard: ${game.getBoneyardCount()}`
     );
   }
 
@@ -332,13 +315,23 @@ export class TableScene extends Phaser.Scene {
   // corretamente (ver DominoRoom.finishMatch), mas nada na tela avisava -
   // so parava de responder, dando a impressao de travamento.
   private handleRoundEnded(result: RoundResult): void {
-    const message = result.winnerId
-      ? `A dupla ${this.describeWinningDuo(result.winnerId)} venceu!`
-      : "Empate! Ninguém venceu essa rodada.";
+    const message = this.describeRoundResult(result);
     this.pushTimelineEntry(message);
     window.alert(message);
     void this.networkService.leaveRoom(this.roomId, this.localPlayerId);
     this.scene.start(SCENE_KEYS.Menu);
+  }
+
+  private describeRoundResult(result: RoundResult): string {
+    if (!result.winnerId) return "Empate! Ninguém venceu essa rodada.";
+
+    const duo = this.describeWinningDuo(result.winnerId);
+    if (!result.winKind) return `A dupla ${duo} venceu!`;
+
+    const phrase = WIN_REASON_PHRASES[result.winKind];
+    const points = WIN_BONUS_POINTS[result.winKind];
+    const suffix = phrase ? ` ${phrase}` : "";
+    return `A dupla ${duo} venceu${suffix}! (+${points} pontos)`;
   }
 
   // Dupla = mesmo seat%2 (parceiros ficam em assentos opostos - mesma
@@ -406,7 +399,7 @@ export class TableScene extends Phaser.Scene {
   }
 
   private getBottomPlayerId(): string {
-    return LOCAL_MODE ? this.gameManager.getCurrentGame().getCurrentPlayerId() : this.localPlayerId;
+    return this.localPlayerId;
   }
 
   private getSeatToSlotMapping(): Record<number, VisualSlot> {

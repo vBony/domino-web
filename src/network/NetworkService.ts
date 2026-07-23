@@ -1,4 +1,5 @@
 import { MoveSide } from "@engine/MoveValidator";
+import { WinReason } from "@engine/WinnerCalculator";
 
 // DTOs: dados primitivos e serializaveis, nunca instancias de classes da
 // engine. Esta e a fronteira que trafega via WebSocket (Colyseus), entao
@@ -83,6 +84,8 @@ export interface MatchEndDTO {
   winningTeam: number | null;
   isDraw: boolean;
   reason: "hand-empty" | "blocked";
+  // Tipo de vitoria (gabuada/double-ended/double/comum) - null quando empate.
+  winKind: WinReason | null;
   scoreTeamA: number;
   scoreTeamB: number;
 }

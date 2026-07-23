@@ -37,8 +37,4 @@ export class Hand {
   isEmpty(): boolean {
     return this.pieces.length === 0;
   }
-
-  totalPips(): number {
-    return this.pieces.reduce((sum, piece) => sum + piece.totalPips(), 0);
-  }
 }

@@ -1,5 +1,4 @@
 import { DominoPiece } from "./DominoPiece";
-import { GameView } from "./GameView";
 import { Hand } from "./Hand";
 import { MoveSide } from "./MoveValidator";
 
@@ -21,11 +20,10 @@ export interface RemoteBoardTile {
 const OPPONENT_PLACEHOLDER_PIECE = new DominoPiece(0, 0);
 
 // Espelha, no cliente, o estado publico que o servidor autoritativo envia
-// (DominoState + hand_update) atraves da mesma interface GameView usada
-// pelo modo local (GameState) - assim TableScene/GameManager nao precisam
-// saber se estao lendo dados locais ou do servidor. NUNCA decide se uma
-// jogada e valida; isso e responsabilidade exclusiva do servidor.
-export class RemoteGameView implements GameView {
+// (DominoState + hand_update). NUNCA decide se uma jogada e valida; isso e
+// responsabilidade exclusiva do servidor - GameManager so aplica o que
+// chega via NetworkService (receivePublicState/receiveHand).
+export class RemoteGameView {
   private localPlayerId: string | null = null;
   private playerIds: string[] = [];
   private currentPlayerId = "";

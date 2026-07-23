@@ -1,7 +1,6 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_LOCAL_MODE: string;
   readonly VITE_SERVER_URL: string;
 }
 

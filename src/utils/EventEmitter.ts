@@ -1,8 +1,8 @@
 type Listener<Args extends unknown[]> = (...args: Args) => void;
 
 // Emissor de eventos generico e tipado, sem depender de Phaser.Events.
-// Reutilizado por GameManager, MockNetworkService, TimerService e ChatService
-// para notificar assinantes sem acoplar quem emite a quem escuta.
+// Reutilizado por GameManager, TimerService e ChatService para notificar
+// assinantes sem acoplar quem emite a quem escuta.
 export class EventEmitter<EventMap extends Record<string, unknown[]>> {
   private listeners: { [K in keyof EventMap]?: Set<Listener<EventMap[K]>> } = {};
 

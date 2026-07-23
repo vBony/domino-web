@@ -6,8 +6,7 @@ const MAX_NICKNAME_LENGTH = 20;
 // Tela padrao ao entrar no site: um botao "Jogar" que revela um campo de
 // nome (DOMElement real - teclado/cursor nativos, sem reinventar input
 // dentro do canvas). Ao confirmar, inicia a TableScene passando o nome
-// escolhido via scene data; nem LOCAL_MODE nem o fluxo online pedem nome
-// sozinhos mais (era um window.prompt antes).
+// escolhido via scene data (era um window.prompt antes).
 export class MenuScene extends Phaser.Scene {
   private titleText!: Phaser.GameObjects.Text;
   private playButtonBg!: Phaser.GameObjects.Graphics;
