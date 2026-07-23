@@ -15,7 +15,6 @@ export interface CameraFit {
 }
 
 export interface CameraBoundsConfig {
-  minZoom: number;
   maxZoom: number;
   padding: number;
 }
@@ -23,8 +22,14 @@ export interface CameraBoundsConfig {
 export class CameraBounds {
   constructor(private readonly config: CameraBoundsConfig) {}
 
-  // Quanto maior o tabuleiro, menor o zoom necessario para caber no viewport,
-  // sempre respeitando os limites minZoom/maxZoom e a folga (padding).
+  // Quanto maior o tabuleiro, menor o zoom necessario para caber no viewport.
+  // So respeita um teto (maxZoom, pra nao ampliar alem do tamanho natural
+  // quando o tabuleiro e pequeno) - nao existe piso: um tabuleiro que
+  // exigisse encolher mais do que isso simplesmente encolhe mais, porque a
+  // cobra pode crescer bastante num sentido so sem virar (BoardLayout so
+  // vira em duplas - ver comentario la). Um piso de zoom aqui ja causou o
+  // tabuleiro invadir o badge do oponente de cima quando a cobra ficava
+  // maior do que o piso permitia encolher - "caber" tem que caber sempre.
   calculateFit(bounds: BoardBounds, viewport: Viewport): CameraFit {
     if (bounds.isEmpty()) {
       return { zoom: this.config.maxZoom, centerX: 0, centerY: 0 };
@@ -38,13 +43,9 @@ export class CameraBounds {
     const idealZoom = Math.min(zoomToFitWidth, zoomToFitHeight);
 
     return {
-      zoom: this.clamp(idealZoom, this.config.minZoom, this.config.maxZoom),
+      zoom: Math.min(idealZoom, this.config.maxZoom),
       centerX: bounds.centerX(),
       centerY: bounds.centerY()
     };
-  }
-
-  private clamp(value: number, min: number, max: number): number {
-    return Math.min(Math.max(value, min), max);
   }
 }

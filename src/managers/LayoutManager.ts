@@ -57,11 +57,22 @@ export class LayoutManager {
     const handHeight = viewport.height * 0.2;
     const contentWidth = viewport.width - sideStripWidth * 2 - chatWidth;
     const contentHeight = viewport.height - topBarHeight - handHeight;
+    // Faixa reservada ao badge do oponente de cima. boardArea comeca DEPOIS
+    // dela (nao por cima) - se as duas dividissem o mesmo espaco, o
+    // tabuleiro podia crescer por baixo do badge mesmo cabendo dentro do
+    // proprio boardArea (bug real: cadeia comprida sem duplas invadindo o
+    // card do oponente de cima).
+    const topSlotHeight = contentHeight * 0.16;
 
     return {
       orientation: "landscape",
       topBar: { x: 0, y: 0, width: viewport.width, height: topBarHeight },
-      boardArea: { x: sideStripWidth, y: topBarHeight, width: contentWidth, height: contentHeight },
+      boardArea: {
+        x: sideStripWidth,
+        y: topBarHeight + topSlotHeight,
+        width: contentWidth,
+        height: contentHeight - topSlotHeight
+      },
       localHandArea: {
         x: sideStripWidth,
         y: viewport.height - handHeight,
@@ -75,7 +86,7 @@ export class LayoutManager {
         height: viewport.height - topBarHeight
       },
       opponentSlots: {
-        top: { x: sideStripWidth, y: topBarHeight, width: contentWidth, height: contentHeight * 0.16 },
+        top: { x: sideStripWidth, y: topBarHeight, width: contentWidth, height: topSlotHeight },
         left: { x: 0, y: topBarHeight, width: sideStripWidth, height: contentHeight },
         right: { x: viewport.width - chatWidth - sideStripWidth, y: topBarHeight, width: sideStripWidth, height: contentHeight }
       }
@@ -89,11 +100,19 @@ export class LayoutManager {
     const chatHeight = viewport.height * 0.12;
     const boardHeight = viewport.height - topBarHeight - handHeight - chatHeight;
     const boardWidth = viewport.width - sideBadgeWidth * 2;
+    // Mesmo raciocinio do computeLandscape: boardArea comeca DEPOIS da
+    // faixa do badge de cima, nao por cima dela.
+    const topSlotHeight = boardHeight * 0.18;
 
     return {
       orientation: "portrait",
       topBar: { x: 0, y: 0, width: viewport.width, height: topBarHeight },
-      boardArea: { x: sideBadgeWidth, y: topBarHeight, width: boardWidth, height: boardHeight },
+      boardArea: {
+        x: sideBadgeWidth,
+        y: topBarHeight + topSlotHeight,
+        width: boardWidth,
+        height: boardHeight - topSlotHeight
+      },
       localHandArea: { x: 0, y: viewport.height - handHeight, width: viewport.width, height: handHeight },
       chatPanel: {
         x: 0,
@@ -102,7 +121,7 @@ export class LayoutManager {
         height: chatHeight
       },
       opponentSlots: {
-        top: { x: sideBadgeWidth, y: topBarHeight, width: boardWidth, height: boardHeight * 0.18 },
+        top: { x: sideBadgeWidth, y: topBarHeight, width: boardWidth, height: topSlotHeight },
         left: { x: 0, y: topBarHeight, width: sideBadgeWidth, height: boardHeight * 0.18 },
         right: { x: viewport.width - sideBadgeWidth, y: topBarHeight, width: sideBadgeWidth, height: boardHeight * 0.18 }
       }

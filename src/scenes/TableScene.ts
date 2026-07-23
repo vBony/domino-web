@@ -51,7 +51,7 @@ export class TableScene extends Phaser.Scene {
     pieceWidth: PIECE_WIDTH,
     maxSegmentLength: 480
   });
-  private readonly cameraBounds = new CameraBounds({ minZoom: 0.4, maxZoom: 1, padding: 60 });
+  private readonly cameraBounds = new CameraBounds({ maxZoom: 1, padding: 60 });
 
   private gameManager!: GameManager;
   private networkService!: NetworkService;
