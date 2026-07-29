@@ -62,8 +62,8 @@ export class DominoPieceView extends Phaser.GameObjects.Container {
     this.redraw();
   }
 
-  // true quando o trecho da cadeia anda no sentido negativo (esquerda ou
-  // para cima) - ver PlacedPiece.reversed para o porque.
+  // true quando as metades fisicas devem trocar de valor para a metade
+  // que encosta na vizinha mostrar o valor certo - ver PlacedPiece.reversed.
   setReversed(reversed: boolean): void {
     if (this.reversed === reversed) return;
     this.reversed = reversed;
@@ -100,12 +100,11 @@ export class DominoPieceView extends Phaser.GameObjects.Container {
     // desenho dos pips (ex: o 6 em duas colunas de tres) nunca gira junto -
     // ele so e reposicionado para caber na metade certa.
     //
-    // this.reversed inverte qual metade fisica mostra qual valor: piece.left
-    // sempre encosta no vizinho anterior da cadeia, mas "anterior" so cai no
-    // lado esquerdo/topo da tela quando o trecho anda pra direita/baixo (ver
-    // PlacedPiece.reversed) - nos trechos que andam pro lado negativo, os
-    // valores precisam trocar de metade fisica pra continuar encostando no
-    // vizinho certo visualmente.
+    // this.reversed inverte qual metade fisica mostra qual valor: o valor
+    // que conecta com o vizinho ja colocado precisa aparecer na metade
+    // voltada para ele, e isso depende da ponta da cadeia e do sentido do
+    // trecho na cobra bilateral - quem decide e o BoardLayout (ver
+    // PlacedPiece.reversed); aqui so se aplica a troca.
     const [firstValue, secondValue] = this.reversed
       ? [this.piece.right, this.piece.left]
       : [this.piece.left, this.piece.right];

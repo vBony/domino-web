@@ -18,6 +18,11 @@ import { SideChoiceView } from "@objects/SideChoiceView";
 
 const PIECE_LENGTH = 64;
 const PIECE_WIDTH = 32;
+// Respiro entre a cobra e as bordas do boardArea. Usado tanto no limite
+// que o BoardLayout respeita quanto no padding do enquadramento da camera
+// - precisam ser o MESMO valor para o zoom ficar em 1 (pecas em tamanho
+// natural) ate o momento exato em que a area util realmente esgota.
+const BOARD_MARGIN = 24;
 const OPPONENT_SLOTS: readonly OpponentSlot[] = ["top", "left", "right"];
 
 // Como cada tipo de vitoria e descrito na frase do alerta de fim de rodada
@@ -49,9 +54,12 @@ export class TableScene extends Phaser.Scene {
   private readonly boardLayout = new BoardLayout({
     pieceLength: PIECE_LENGTH,
     pieceWidth: PIECE_WIDTH,
-    maxSegmentLength: 480
+    gap: 10
   });
-  private readonly cameraBounds = new CameraBounds({ maxZoom: 1, padding: 60 });
+  // maxZoom > 1 deixa o comeco da partida (cadeia curta) com pecas um
+  // pouco ampliadas; conforme a cobra cresce o zoom desce naturalmente
+  // ate 1 e so passa disso quando o BoardLayout esgota a espiral.
+  private readonly cameraBounds = new CameraBounds({ maxZoom: 1.25, padding: BOARD_MARGIN });
 
   private gameManager!: GameManager;
   private networkService!: NetworkService;
@@ -95,6 +103,10 @@ export class TableScene extends Phaser.Scene {
     this.pendingPiece = null;
     this.timelineEntries.length = 0;
     this.boardPieceViews.clear();
+    // O BoardLayout guarda estado da partida (historico de insercao e
+    // escala de alivio) para as pecas nunca mudarem de lugar entre
+    // jogadas - uma partida nova precisa comecar do zero.
+    this.boardLayout.reset();
 
     this.statusText = this.add
       .text(0, 0, "", { fontSize: "20px", color: "#f5f0e6" })
@@ -256,7 +268,10 @@ export class TableScene extends Phaser.Scene {
 
   private refreshBoard(): void {
     const game = this.gameManager.getCurrentGame();
-    const placedPieces = this.boardLayout.computeLayout(game.getBoard());
+    const placedPieces = this.boardLayout.computeLayout(game.getBoard(), {
+      width: Math.max(this.boardArea.width - BOARD_MARGIN * 2, PIECE_LENGTH * 2),
+      height: Math.max(this.boardArea.height - BOARD_MARGIN * 2, PIECE_LENGTH * 2)
+    });
 
     // Peca por id, nao por indice: jogar no lado esquerdo da cadeia faz
     // unshift no array do GameState, entao o indice de cada peca dentro

@@ -8,7 +8,9 @@ import { TableScene } from "@scenes/TableScene";
 export const PHASER_GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: "app",
-  backgroundColor: "#0f0f12",
+  // Cor solida da mesa (tom azul-acinzentado proximo ao do playdrift,
+  // sem imagem de fundo).
+  backgroundColor: "#3a4a5e",
   scale: {
     // RESIZE + LayoutManager (a criar) cuidam da responsividade real,
     // em vez de depender do FIT/ENVELOPE automatico do Phaser.
