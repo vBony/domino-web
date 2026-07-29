@@ -3,7 +3,7 @@ import { SCENE_KEYS } from "@config/sceneKeys";
 import { Player } from "@engine/Player";
 import { DominoPiece } from "@engine/DominoPiece";
 import { MoveSide } from "@engine/MoveValidator";
-import { BoardLayout } from "@engine/BoardLayout";
+import { BoardLayout, PlacedPiece } from "@engine/BoardLayout";
 import { CameraBounds } from "@engine/CameraBounds";
 import { GameManager, TimelineEvent } from "@managers/GameManager";
 import { LayoutManager, OpponentSlot, Rect, VisualSlot } from "@managers/LayoutManager";
@@ -81,6 +81,15 @@ export class TableScene extends Phaser.Scene {
   // handleLocalPieceClicked). null = nenhuma escolha pendente.
   private pendingPiece: DominoPiece | null = null;
   private boardArea: Rect = { x: 0, y: 0, width: 0, height: 0 };
+  // Origem (em coordenadas de tela) de onde cada peca recem-jogada deve
+  // "voar" ate a mesa: a propria peca na mao local, ou o badge do oponente
+  // que jogou. Preenchido ANTES do estado confirmado chegar (clique local /
+  // evento tile_played) e consumido quando a view da peca e criada.
+  private readonly pendingPlayOrigins = new Map<string, { x: number; y: number }>();
+  // Pecas com tween de entrada em andamento -> destino (em coordenadas do
+  // boardContainer). Enquanto o destino nao mudar, refreshBoard nao pode
+  // reposicionar a view (cortaria a animacao no meio).
+  private readonly animatingTargets = new Map<string, { x: number; y: number }>();
   // Phaser chama update() a cada frame independente do create() (async
   // para o modo online) ja ter terminado. Sem este guard, update() roda
   // enquanto gameManager existe mas as views ainda nao foram construidas
@@ -103,6 +112,8 @@ export class TableScene extends Phaser.Scene {
     this.pendingPiece = null;
     this.timelineEntries.length = 0;
     this.boardPieceViews.clear();
+    this.pendingPlayOrigins.clear();
+    this.animatingTargets.clear();
     // O BoardLayout guarda estado da partida (historico de insercao e
     // escala de alivio) para as pecas nunca mudarem de lugar entre
     // jogadas - uma partida nova precisa comecar do zero.
@@ -273,6 +284,22 @@ export class TableScene extends Phaser.Scene {
       height: Math.max(this.boardArea.height - BOARD_MARGIN * 2, PIECE_LENGTH * 2)
     });
 
+    // O transform do container e aplicado ANTES de criar/posicionar as
+    // views: a animacao de entrada precisa converter a origem (coordenada
+    // de tela da mao/badge) para coordenadas locais do container, e isso
+    // depende do zoom/posicao ja atualizados desta rodada de layout.
+    const bounds = this.boardLayout.computeBounds(placedPieces);
+    const fit = this.cameraBounds.calculateFit(bounds, {
+      width: this.boardArea.width,
+      height: this.boardArea.height
+    });
+
+    this.boardContainer.setScale(fit.zoom);
+    this.boardContainer.setPosition(
+      this.boardArea.x + this.boardArea.width / 2 - fit.centerX * fit.zoom,
+      this.boardArea.y + this.boardArea.height / 2 - fit.centerY * fit.zoom
+    );
+
     // Peca por id, nao por indice: jogar no lado esquerdo da cadeia faz
     // unshift no array do GameState, entao o indice de cada peca dentro
     // dele muda a cada rodada. Associar view por posicao (array simples)
@@ -288,21 +315,59 @@ export class TableScene extends Phaser.Scene {
         });
         this.boardContainer.add(view);
         this.boardPieceViews.set(placed.piece.id, view);
+        view.applyPlacement(placed);
+        this.animatePieceEntry(view, placed, fit.zoom);
+        continue;
       }
+
+      const animatingTarget = this.animatingTargets.get(placed.piece.id);
+      if (animatingTarget && animatingTarget.x === placed.x && animatingTarget.y === placed.y) {
+        // Tween de entrada ainda voando para o MESMO destino: nao mexe na
+        // view (reposicionar aqui cortaria a animacao no meio).
+        continue;
+      }
+
+      // Destino mudou (replay de alivio/resize) ou nao ha animacao: para
+      // qualquer tween pendente e aplica o placement direto.
+      this.tweens.killTweensOf(view);
+      this.animatingTargets.delete(placed.piece.id);
+      view.setScale(1);
       view.applyPlacement(placed);
     }
+  }
 
-    const bounds = this.boardLayout.computeBounds(placedPieces);
-    const fit = this.cameraBounds.calculateFit(bounds, {
-      width: this.boardArea.width,
-      height: this.boardArea.height
+  // Faz a peca recem-jogada "voar" da origem registrada (mao local ou badge
+  // do oponente) ate o lugar calculado na mesa, encolhendo ate o tamanho
+  // natural. Sem origem registrada (ex: reconexao), a peca aparece direto.
+  private animatePieceEntry(view: DominoPieceView, placed: PlacedPiece, zoom: number): void {
+    const origin = this.pendingPlayOrigins.get(placed.piece.id);
+    this.pendingPlayOrigins.delete(placed.piece.id);
+    if (!origin || zoom <= 0) return;
+
+    // Converte a origem (tela) para coordenadas locais do boardContainer.
+    const startX = (origin.x - this.boardContainer.x) / zoom;
+    const startY = (origin.y - this.boardContainer.y) / zoom;
+    // Comeca no tamanho aproximado da peca na mao (1.4x) em PIXELS DE TELA,
+    // independente do zoom da mesa, e encolhe ate o tamanho natural.
+    const startScale = Phaser.Math.Clamp(1.4 / zoom, 1, 3);
+
+    view.setPosition(startX, startY);
+    view.setScale(startScale);
+    this.animatingTargets.set(placed.piece.id, { x: placed.x, y: placed.y });
+
+    this.tweens.add({
+      targets: view,
+      x: placed.x,
+      y: placed.y,
+      scale: 1,
+      duration: 320,
+      ease: "Cubic.easeOut",
+      onComplete: () => {
+        this.animatingTargets.delete(placed.piece.id);
+        view.setPosition(placed.x, placed.y);
+        view.setScale(1);
+      }
     });
-
-    this.boardContainer.setScale(fit.zoom);
-    this.boardContainer.setPosition(
-      this.boardArea.x + this.boardArea.width / 2 - fit.centerX * fit.zoom,
-      this.boardArea.y + this.boardArea.height / 2 - fit.centerY * fit.zoom
-    );
   }
 
   private refreshHands(): void {
@@ -368,6 +433,7 @@ export class TableScene extends Phaser.Scene {
         this.pushTimelineEntry("Partida iniciada.");
         return;
       case "tile_played":
+        this.recordOpponentPlayOrigin(event.playerId, event.piece.left, event.piece.right);
         this.pushTimelineEntry(`${this.nameFor(event.playerId)} jogou ${event.piece.left}|${event.piece.right}.`);
         return;
       case "turn_passed":
@@ -392,6 +458,35 @@ export class TableScene extends Phaser.Scene {
 
   private nameFor(playerId: string): string {
     return this.players.find((player) => player.id === playerId)?.name ?? playerId;
+  }
+
+  // Origem da animacao para jogada de OPONENTE: o badge do assento dele.
+  // O evento tile_played chega antes do estado confirmado (broadcast e
+  // imediato, patch de estado e periodico), entao a origem ja esta
+  // registrada quando refreshBoard criar a view da peca. Jogadas do
+  // proprio jogador local sao ignoradas aqui: a origem delas (a posicao
+  // real da peca na mao) e registrada no momento do clique, que acontece
+  // antes e e mais precisa que o badge.
+  private recordOpponentPlayOrigin(playerId: string, left: number, right: number): void {
+    if (playerId === this.localPlayerId) return;
+
+    const seat = this.players.find((player) => player.id === playerId)?.seat;
+    if (seat === undefined) return;
+    const slot = this.getSeatToSlotMapping()[seat];
+    if (!slot || slot === "bottom") return;
+
+    const badge = this.opponentViews[slot];
+    // Mesmo id normalizado que DominoPiece gera (min-max).
+    const pieceId = `${Math.min(left, right)}-${Math.max(left, right)}`;
+    this.pendingPlayOrigins.set(pieceId, { x: badge.x, y: badge.y });
+  }
+
+  // Origem da animacao para jogada LOCAL: a posicao atual da peca na mao.
+  // Precisa ser capturada ANTES de enviar a jogada - quando o servidor
+  // confirmar, a peca ja saiu da mao e a posicao se perde.
+  private recordLocalPlayOrigin(pieceId: string): void {
+    const origin = this.localHandView.getPieceScreenPosition(pieceId);
+    if (origin) this.pendingPlayOrigins.set(pieceId, origin);
   }
 
   private updateOpponentBadges(): void {
@@ -440,6 +535,7 @@ export class TableScene extends Phaser.Scene {
     // ha escolha real pra perguntar - joga direto.
     if (sides.length === 1 || !openEnds) {
       this.cancelPendingChoice();
+      this.recordLocalPlayOrigin(piece.id);
       this.gameManager.playPiece(activePlayerId, piece.id, sides[0]!);
       return;
     }
@@ -454,6 +550,7 @@ export class TableScene extends Phaser.Scene {
     const activePlayerId = this.getBottomPlayerId();
     const piece = this.pendingPiece;
     this.cancelPendingChoice();
+    this.recordLocalPlayOrigin(piece.id);
     this.gameManager.playPiece(activePlayerId, piece.id, side);
   }
 

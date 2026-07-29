@@ -30,6 +30,16 @@ export class LocalHandView extends Phaser.GameObjects.Container {
     this.layoutPieces();
   }
 
+  // Posicao (em coordenadas de tela) de uma peca especifica da mao - usada
+  // pela TableScene como ponto de partida da animacao de jogada. null se a
+  // peca nao esta (mais) na mao. Este container fica na raiz da Scene e nao
+  // escala, entao a soma direta das posicoes ja e a coordenada de tela.
+  getPieceScreenPosition(pieceId: string): { x: number; y: number } | null {
+    const view = this.pieceViews.find((candidate) => candidate.getPiece().id === pieceId);
+    if (!view) return null;
+    return { x: this.x + view.x, y: this.y + view.y };
+  }
+
   setHand(pieces: readonly DominoPiece[]): void {
     this.pieceViews.forEach((view) => view.destroy());
     this.pieceViews = pieces.map((piece) => this.createPieceView(piece));
