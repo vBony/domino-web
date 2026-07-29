@@ -41,6 +41,45 @@ interface TableSceneData {
   nickname?: string;
 }
 
+// Eventos de bridge emitidos via `this.events` (EventEmitter da propria
+// Scene do Phaser) para a casca React (ver hooks/useDominoGame.ts) consumir
+// sem precisar conhecer GameManager/RemoteGameView por dentro. Cada um e
+// emitido exatamente no ponto que ja calcula essa informacao hoje pro
+// desenho Phaser - nenhuma logica nova, so reexportar dado ja existente.
+export type TableSeatSlot = OpponentSlot | "bottom";
+
+export interface TableIdentity {
+  nickname: string;
+  roomId: string;
+}
+
+export interface TableLayoutRects {
+  opponentSlots: Record<OpponentSlot, Rect>;
+  localHandArea: Rect;
+}
+
+export interface TableSeatPlayer {
+  id: string;
+  name: string;
+  seatSlot: TableSeatSlot;
+  tilesCount: number;
+  isCurrentTurn: boolean;
+  isLocal: boolean;
+  connected: boolean;
+}
+
+export interface TableGameInfo {
+  currentPlayerName: string | null;
+  boneyardCount: number;
+}
+
+export interface MoveHistoryEntry {
+  kind: "match_started" | "tile_played" | "turn_passed";
+  playerName: string | null;
+  pieceLabel: string | null;
+  timestamp: number;
+}
+
 // Scene principal: orquestra GameManager (estado/eventos), LayoutManager
 // (posicoes responsivas) e as views (DominoPieceView/OpponentSeatView/
 // LocalHandView). Nao decide regra de jogo nem calcula layout - so aplica
@@ -65,6 +104,9 @@ export class TableScene extends Phaser.Scene {
   private networkService!: NetworkService;
   private roomId = "";
   private players: Player[] = [];
+  // PublicPlayerDTO.connected nao cabe em Player (engine) - guardado a parte
+  // so pra alimentar o overlay React (TableSeatsOverlay) com o status real.
+  private readonly connectedByPlayerId = new Map<string, boolean>();
   private localPlayerId = "";
   private boardContainer!: Phaser.GameObjects.Container;
   private readonly boardPieceViews = new Map<string, DominoPieceView>();
@@ -114,6 +156,7 @@ export class TableScene extends Phaser.Scene {
     this.boardPieceViews.clear();
     this.pendingPlayOrigins.clear();
     this.animatingTargets.clear();
+    this.connectedByPlayerId.clear();
     // O BoardLayout guarda estado da partida (historico de insercao e
     // escala de alivio) para as pecas nunca mudarem de lugar entre
     // jogadas - uma partida nova precisa comecar do zero.
@@ -132,6 +175,7 @@ export class TableScene extends Phaser.Scene {
     this.refreshHands();
     this.refreshTopBar();
     this.refreshTurnIndicator();
+    this.emitPlayersChanged();
 
     this.gameManager.events.on("stateChanged", () => this.refresh());
     // "partida" no domino = uma rodada (mao esvaziada ou jogo travado), nao
@@ -146,7 +190,15 @@ export class TableScene extends Phaser.Scene {
     // empilha mais um handler chamando applyLayout() numa Scene desativada.
     const onResize = () => this.applyLayout();
     this.scale.on("resize", onResize);
-    this.events.once("shutdown", () => this.scale.off("resize", onResize));
+    this.events.once("shutdown", () => {
+      this.scale.off("resize", onResize);
+      // Sem isto, desmontar o GameCanvas (navegacao SPA pra fora de /play)
+      // destroi o Phaser.Game mas nunca avisa o servidor que este jogador
+      // saiu da sala - antes disso so acontecia via handleRoundEnded.
+      if (this.networkService && this.roomId) {
+        void this.networkService.leaveRoom(this.roomId, this.localPlayerId);
+      }
+    });
 
     this.ready = true;
   }
@@ -169,6 +221,8 @@ export class TableScene extends Phaser.Scene {
 
     networkService.receivePublicState((state) => {
       this.players = [...state.players].sort((a, b) => a.seat - b.seat).map((p) => new Player(p.id, p.username, p.seat));
+      this.connectedByPlayerId.clear();
+      for (const p of state.players) this.connectedByPlayerId.set(p.id, p.connected);
       this.statusText.setText(this.describeWaitingStatus(state.status, this.players.length));
     });
 
@@ -181,6 +235,7 @@ export class TableScene extends Phaser.Scene {
       throw new Error("Falha ao resolver identidade do jogador apos o join");
     }
     this.localPlayerId = identity.id;
+    this.events.emit("identityResolved", { nickname: identity.username, roomId: this.roomId } satisfies TableIdentity);
 
     this.gameManager = new GameManager(networkService, this.localPlayerId);
     this.statusText.setText(this.describeWaitingStatus("waiting", this.players.length));
@@ -196,10 +251,17 @@ export class TableScene extends Phaser.Scene {
   private buildStaticVisuals(): void {
     this.boardContainer = this.add.container(0, 0);
 
+    // topBarText/turnIndicatorText/OpponentSeatView (badges de nome+turno)
+    // ficam escondidos: o overlay React (TableSeatsOverlay) e quem desenha
+    // esse chrome agora (avatar/nome/troféu/turno), alinhado via o evento
+    // "layoutChanged". As views continuam existindo/posicionadas so como
+    // ancora (x/y) pra animacao de peca voando ate o oponente que jogou.
     this.topBarText = this.add.text(0, 0, "", { fontSize: "16px", color: "#f5f0e6" }).setOrigin(0, 0.5);
+    this.topBarText.setVisible(false);
     this.turnIndicatorText = this.add
       .text(0, 0, "", { fontSize: "20px", color: "#7CFC9B", fontStyle: "bold" })
       .setOrigin(0.5, 1);
+    this.turnIndicatorText.setVisible(false);
 
     this.localHandView = new LocalHandView(
       this,
@@ -209,9 +271,13 @@ export class TableScene extends Phaser.Scene {
 
     for (const slot of OPPONENT_SLOTS) {
       this.opponentViews[slot] = new OpponentSeatView(this, { width: 130, height: 70 });
+      this.opponentViews[slot].setVisible(false);
     }
 
+    // Idem topBarText/turnIndicatorText/OpponentSeatView acima: o card
+    // "Movimentos" do React (MoveHistoryCard) e quem exibe o historico agora.
     this.timelinePanel = new TimelinePanelView(this, { width: 1, height: 1 });
+    this.timelinePanel.setVisible(false);
 
     this.sideChoiceView = new SideChoiceView(this, { buttonWidth: 150, buttonHeight: 44, gap: 16 }, (side) =>
       this.handleSideChosen(side)
@@ -250,6 +316,11 @@ export class TableScene extends Phaser.Scene {
     }
 
     this.refreshBoard();
+
+    this.events.emit("layoutChanged", {
+      opponentSlots: schema.opponentSlots,
+      localHandArea: schema.localHandArea
+    } satisfies TableLayoutRects);
   }
 
   private refresh(): void {
@@ -257,7 +328,28 @@ export class TableScene extends Phaser.Scene {
     this.refreshHands();
     this.refreshTopBar();
     this.refreshTurnIndicator();
+    this.emitPlayersChanged();
     this.cancelPendingChoiceIfStale();
+  }
+
+  private emitPlayersChanged(): void {
+    this.events.emit("playersChanged", this.buildSeatPlayers());
+  }
+
+  private buildSeatPlayers(): TableSeatPlayer[] {
+    const game = this.gameManager.getCurrentGame();
+    const currentPlayerId = game.getCurrentPlayerId();
+    const seatToSlot = this.getSeatToSlotMapping();
+
+    return this.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+      seatSlot: seatToSlot[player.seat] ?? "bottom",
+      tilesCount: game.getHand(player.id).count(),
+      isCurrentTurn: player.id === currentPlayerId,
+      isLocal: player.id === this.localPlayerId,
+      connected: this.connectedByPlayerId.get(player.id) ?? true
+    }));
   }
 
   // Se por algum motivo o estado mudou enquanto uma escolha de lado estava
@@ -383,6 +475,10 @@ export class TableScene extends Phaser.Scene {
     this.topBarText.setText(
       `Sala Online (${myName ?? "..."})  |  Vez de: ${currentPlayer?.name ?? "-"}  |  Boneyard: ${game.getBoneyardCount()}`
     );
+    this.events.emit("gameInfoChanged", {
+      currentPlayerName: currentPlayer?.name ?? null,
+      boneyardCount: game.getBoneyardCount()
+    } satisfies TableGameInfo);
   }
 
   private refreshTurnIndicator(): void {
@@ -431,15 +527,24 @@ export class TableScene extends Phaser.Scene {
     switch (event.type) {
       case "match_started":
         this.pushTimelineEntry("Partida iniciada.");
+        this.emitMoveHistoryEntry({ kind: "match_started", playerName: null, pieceLabel: null });
         return;
-      case "tile_played":
+      case "tile_played": {
         this.recordOpponentPlayOrigin(event.playerId, event.piece.left, event.piece.right);
-        this.pushTimelineEntry(`${this.nameFor(event.playerId)} jogou ${event.piece.left}|${event.piece.right}.`);
+        const pieceLabel = `${event.piece.left}|${event.piece.right}`;
+        this.pushTimelineEntry(`${this.nameFor(event.playerId)} jogou ${pieceLabel}.`);
+        this.emitMoveHistoryEntry({ kind: "tile_played", playerName: this.nameFor(event.playerId), pieceLabel });
         return;
+      }
       case "turn_passed":
         this.pushTimelineEntry(`${this.nameFor(event.playerId)} passou a vez.`);
+        this.emitMoveHistoryEntry({ kind: "turn_passed", playerName: this.nameFor(event.playerId), pieceLabel: null });
         return;
     }
+  }
+
+  private emitMoveHistoryEntry(entry: Omit<MoveHistoryEntry, "timestamp">): void {
+    this.events.emit("moveHistoryEntry", { ...entry, timestamp: Date.now() } satisfies MoveHistoryEntry);
   }
 
   // So o modo online chega aqui: o modo local ja filtra essa jogada em

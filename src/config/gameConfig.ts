@@ -7,7 +7,9 @@ import { TableScene } from "@scenes/TableScene";
 // registradas aqui conforme forem criadas, na ordem em que devem rodar.
 export const PHASER_GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  parent: "app",
+  // "parent" nao e fixado aqui: quem cria o Game (hoje, o hook
+  // useDominoGame) sempre informa o container DOM real via override no
+  // spread da config.
   // Cor solida da mesa (tom azul-acinzentado proximo ao do playdrift,
   // sem imagem de fundo).
   backgroundColor: "#3a4a5e",

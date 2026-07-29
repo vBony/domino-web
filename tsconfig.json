@@ -17,8 +17,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
+      "@/*": ["src/*"],
       "@engine/*": ["src/engine/*"],
       "@scenes/*": ["src/scenes/*"],
       "@objects/*": ["src/objects/*"],
